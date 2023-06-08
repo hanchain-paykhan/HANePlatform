@@ -2,8 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title TokenVestingLock
@@ -26,7 +24,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * accounts but kept in this contract, and the actual transfer is triggered as a separate step by calling the {release} function.
 */
 
-contract TokenVestingLock is Ownable {
+contract TokenVestingLock {
     IERC20 public token;
 
     // Payee struct represents a participant who is eligible to receive tokens from a smart contract.
@@ -180,32 +178,5 @@ contract TokenVestingLock is Ownable {
         return tokensPerRound * remaining;
     }
 
-    /** Allows the owner to recover any ERC20 tokens sent to this contract, except for the release tokens.
-     * If the token being recovered is the release token, it can only be recovered if it exceeds the total release tokens.
-     * Only the owner of the contract can call this function.
-     */
-    function recoverERC20(address _tokenAddress, uint256 _tokenAmount) external onlyOwner {
-        if(address(token) == _tokenAddress) {
-            uint tokenAmount = token.balanceOf(address(this)) - remainingTokens();
-            require(tokenAmount >= _tokenAmount, "Total Release Tokens cannot be withdrawn");
-            IERC20(_tokenAddress).transfer(msg.sender, _tokenAmount);
-            emit RecoveredERC20(_tokenAddress, _tokenAmount);
-        } else {
-            IERC20(_tokenAddress).transfer(msg.sender, _tokenAmount);
-            emit RecoveredERC20(_tokenAddress, _tokenAmount);
-        }
-    }
-
-    /**
-     * Transfers an ERC721 token held by the contract to the owner.
-     * Only the owner of the contract can call this function.
-     */
-    function recoverERC721(address _tokenAddress, uint256 _tokenId) external onlyOwner {
-        IERC721(_tokenAddress).safeTransferFrom(address(this), msg.sender, _tokenId);
-        emit RecoveredERC721(_tokenAddress, _tokenId);
-    }
-
     event released(address indexed account, uint256 amount);
-    event RecoveredERC20(address token, uint256 amount);
-    event RecoveredERC721(address token, uint256 tokenId);
 }
