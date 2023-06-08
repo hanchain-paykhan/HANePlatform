@@ -37,11 +37,11 @@ contract TokenVestingLock is Ownable {
         uint256 releaseTokens;  // The total number of tokens the payee is eligible to receive over the course of the contract
     }
 
-    uint256 public durationSeconds;  // The duration of the vesting period in seconds.
+    uint256 public immutable durationSeconds;  // The duration of the vesting period in seconds.
     uint256 public intervalSeconds;  // The time interval between token releases in seconds.
     uint256 public totalReleaseTokens;  // The total number of tokens to be released over the vesting period.
     uint256 public totalReleasedTokens;  // The total number of tokens already released.
-    uint256 public startTime;  // The timestamp when the vesting period starts.
+    uint256 public immutable startTime;  // The timestamp when the vesting period starts.
     uint256 public totalRounds;  // The total number of token release rounds.
     uint256 public totalAccounts;  // The total number of payees.
 
@@ -60,9 +60,16 @@ contract TokenVestingLock is Ownable {
      * @param _startDelay The delay in seconds before vesting starts.
      * @param _accounts The list of addresses of the payees.
      */
+    
     constructor(IERC20 _token, uint256 _startDelay, uint256 _durationSeconds, uint256 _intervalSeconds, uint256 _totalReleaseTokens, address[] memory _accounts, uint256[] memory _shares) {
         require(_accounts.length == _shares.length, "TokenVestingLock: accounts and shares length mismatch");
         require(_accounts.length > 0, "TokenVestingLock: no payees");
+
+        for (uint256 i = 0; i < _accounts.length - 1; i++) {
+            for (uint256 j = i + 1; j < _accounts.length; j++) {
+                require(_accounts[i] != _accounts[j], "TokenVestingLock: duplicate addresses");
+            }
+        }
 
         uint256 totalShares = 0;
         for (uint256 i = 0; i < _shares.length; i++) {
@@ -77,7 +84,7 @@ contract TokenVestingLock is Ownable {
         totalReleaseTokens = _totalReleaseTokens;
         totalRounds = durationSeconds/intervalSeconds;
         totalAccounts = _accounts.length;
-     for (uint256 i = 0; i < _accounts.length; i++) {
+        for (uint256 i = 0; i < _accounts.length; i++) {
             uint256 tokensPerRoundPerBeneficiary = totalReleaseTokens * intervalSeconds / durationSeconds * _shares[i] / 100;
             uint256 releaseTokens = tokensPerRoundPerBeneficiary * totalRounds;
             payees.push(Payee(_accounts[i], _shares[i], tokensPerRoundPerBeneficiary, releaseTokens));
@@ -97,13 +104,8 @@ contract TokenVestingLock is Ownable {
         uint256 currentTime = block.timestamp;
         require(currentTime >= startTime, "Vesting not started yet");
 
-        uint256 elapsedTime = currentTime - startTime;
-        uint256 currentInterval = elapsedTime / intervalSeconds;
-        uint256 nextIntervalTime = (currentInterval + 1) * intervalSeconds;
-
-        if (nextIntervalTime <= currentTime) {
-            uint256 numIntervals = (currentTime - startTime) / intervalSeconds;
-            uint256 totalVestedTokens = (totalReleaseTokens * numIntervals) / (durationSeconds / intervalSeconds);
+        uint256 numIntervals = (currentTime - startTime) / intervalSeconds;
+        uint256 totalVestedTokens = (totalReleaseTokens * numIntervals) / (durationSeconds / intervalSeconds);
             if (totalVestedTokens > totalReleaseTokens) {
                 totalVestedTokens = totalReleaseTokens;
             }
@@ -111,17 +113,13 @@ contract TokenVestingLock is Ownable {
             for (uint256 i = 0; i < payees.length; i++) {
                 uint256 payeeShare = (payees[i].shares * totalVestedTokens) / 100;
                 uint256 releasable = payeeShare - releasedAmount[payees[i].account];
-
-                if (unreleased > 0 && releasable > 0) {
-                    uint256 tokensToRelease = (releasable < unreleased) ? releasable : unreleased;
-                    releasedAmount[payees[i].account] += tokensToRelease;
-                    unreleased -= tokensToRelease;
-                    totalReleasedTokens += tokensToRelease;
-                    token.transfer(payees[i].account, tokensToRelease);
-                    emit released(payees[i].account, tokensToRelease);
-                }
+                uint256 tokensToRelease = (releasable < unreleased) ? releasable : unreleased;
+                releasedAmount[payees[i].account] += tokensToRelease;
+                unreleased -= tokensToRelease;
+                totalReleasedTokens += tokensToRelease;
+                token.transfer(payees[i].account, tokensToRelease);
+                emit released(payees[i].account, tokensToRelease);
             }
-        }
     }
 
     /**
@@ -191,7 +189,7 @@ contract TokenVestingLock is Ownable {
             uint tokenAmount = token.balanceOf(address(this)) - remainingTokens();
             require(tokenAmount >= _tokenAmount, "Total Release Tokens cannot be withdrawn");
             IERC20(_tokenAddress).transfer(msg.sender, _tokenAmount);
-            emit RecoveredERC20(_tokenAddress, tokenAmount);
+            emit RecoveredERC20(_tokenAddress, _tokenAmount);
         } else {
             IERC20(_tokenAddress).transfer(msg.sender, _tokenAmount);
             emit RecoveredERC20(_tokenAddress, _tokenAmount);
